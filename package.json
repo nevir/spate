@@ -1,0 +1,40 @@
+{
+  "name":        "spate",
+  "version":     "0.0.1",
+  "description": "Utility methods to reduce the weight of JavaScript control flow logic.",
+  "keywords":   ["control flow", "flow", "utility"],
+  "homepage":    "https://github.com/nevir/spate",
+  "author":      "Ian MacLeod <ian@nevir.net> (https://github.com/nevir)",
+
+  "licenses": [{
+    "type": "MIT",
+    "url":  "https://github.com/nevir/spate/MIT-LICENSE.txt"
+  }],
+
+  "repository": {
+    "type": "git",
+    "url":  "https://github.com/nevir/spate"
+  },
+
+  "main": "./lib/spate",
+  "directories": {
+    "lib": "./lib"
+  },
+
+  "engines": {
+    "node": ">= 0.4.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "coffee-script": "1.2.0",
+    "groc":         "~0.2.6",
+    "vows":         "~0.6.1"
+  },
+
+  "scripts": {
+    "build-lib":  "rm -rf lib && node_modules/.bin/coffee -c -o lib/ src/",
+    "build-doc":  "rm -rf doc && rm -rf doc && groc",
+    "prepublish": "scripts/prepublish",
+    "test":       "npm run-script build-lib && node_modules/.bin/vows test/*_test.coffee --isolate --spec"
+  }
+}
