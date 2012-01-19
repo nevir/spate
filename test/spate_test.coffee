@@ -60,7 +60,7 @@ vows.describe('spate').addBatch
           assert.equal error, 'some error'
 
         "should stop the pool from continuing": (error, res) ->
-          assert.deepEqual @result, [11]
+          assert.equal @result.length, 1
 
 
     "with asynchronous worker functions":
@@ -73,7 +73,12 @@ vows.describe('spate').addBatch
 
           pool = spate.pool @workItems, options, (item, done) =>
             @inProgress += 1; @maxInProgress = Math.max(@inProgress, @maxInProgress)
-            setTimeout (=> @result.push item + 10; @inProgress -= 1; done(result...)), 1
+            worker = =>
+              @result.push item + 10
+              @inProgress -= 1
+              done(result...)
+
+            setTimeout worker, Math.ceil(Math.random() * 5)
 
           pool.exec @callback
           undefined
@@ -110,6 +115,6 @@ vows.describe('spate').addBatch
           assert.equal error, 'some error'
 
         "should stop the pool from continuing": (error, res) ->
-          assert.deepEqual @result, [11]
+          assert.equal @result.length, 1
 
 .export(module)
