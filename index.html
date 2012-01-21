@@ -1,0 +1,49 @@
+<!DOCTYPE html><html lang="en"><head><title>index</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="index"><meta name="groc-project-path" content="src/spate.coffee"><meta name="groc-github-url" content="https://github.com/nevir/spate"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path"><a href="https://github.com/nevir/spate/blob/master/src/spate.coffee">src/spate.coffee</a></div></div><div id="document"><div class="segment"><div class="comments"><div class="wrapper"><h1 id="spate">Spate</h1>
+
+<p>Flow control the way I like it.  <em>One more</em> flow control library won't hurt, will it?</p></div></div><div class="code"><div class="wrapper"><span class="nv">spate =</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><h2 id="pool">pool</h2>
+
+<p>When interacting with system resources such as file handles or sockets, it can be beneficial to
+throttle the amount of resources you are touching concurrently.  Additionally, it can be used as
+a debugging aid by throttling what is normally a concurrent process into a squential one.</p>
+
+<p>For example:</p>
+
+<pre><code>pool = spate.pool fs.readdirSync('some_dir'), maxConcurrency: 5, (path, done) -&gt;
+  fs.readFile path, (error, data) -&gt;
+    return done(error) if error
+    console.log data
+    done()
+
+pool.exec (error) -&gt;
+  console.log 'Finished execution!'
+</code></pre></div></div><div class="code"><div class="wrapper">  <span class="nv">pool: </span><span class="nf">(workItems, options={}, workerFunc) -&gt;</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>Currently, the only option that this supports is <code>maxConcurrency</code>.  It, :gasp:, indicates that
+there should be no more worker functions active at a time than the value given.  There is no
+sane default, so it is required.</p>
+
+<p>Now, you may be wondering why we're making an <em>option</em> required.</p>
+
+<ol>
+<li>It conveys more meaning when implementing a call to <code>spate.pool</code>.</li>
+<li>This function can be extended to support more options without complex argument parsing.</li>
+</ol></div></div><div class="code"><div class="wrapper">    <span class="nx">unless</span> <span class="k">typeof</span> <span class="nx">options</span><span class="p">.</span><span class="nx">maxConcurrency</span> <span class="o">==</span> <span class="s1">&#39;number&#39;</span>
+      <span class="k">throw</span> <span class="k">new</span> <span class="nx">TypeError</span> <span class="s1">&#39;maxConcurrency is a required option for spate.pool.&#39;</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>For similar reasons as above, we return an object - rather than a wrapped function - for
+clarity and future extensibility.</p></div></div><div class="code"><div class="wrapper">    <span class="nv">result = </span><span class="p">{}</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>We only allow the pool to be executed once.</p></div></div><div class="code"><div class="wrapper">    <span class="nv">hasResponded = </span><span class="kc">false</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>You get to call <code>exec</code> on it.</p></div></div><div class="code"><div class="wrapper">    <span class="nv">result.exec = </span><span class="nf">(callback) -&gt;</span>
+      <span class="nv">numInFlight = </span><span class="mi">0</span>
+      <span class="nv">itemsLeft   = </span><span class="p">(</span><span class="nx">i</span> <span class="k">for</span> <span class="nx">i</span> <span class="k">in</span> <span class="nx">workItems</span><span class="p">)</span> <span class="c1"># Make sure we have an array that we are free to modify.</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>Performance: Because we use an Array, it is considerably faster to pop.  So we reverse it.</p></div></div><div class="code"><div class="wrapper">      <span class="nx">itemsLeft</span><span class="p">.</span><span class="nx">reverse</span><span class="p">()</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>Each iteration of work happens in here.</p></div></div><div class="code"><div class="wrapper">      <span class="nv">processItem = </span><span class="o">-&gt;</span>
+        <span class="k">return</span> <span class="k">if</span> <span class="nx">hasResponded</span>
+
+        <span class="nv">item = </span><span class="nx">itemsLeft</span><span class="p">.</span><span class="nx">pop</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nx">item</span><span class="o">?</span>
+          <span class="nx">numInFlight</span> <span class="o">+=</span> <span class="mi">1</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>We purposely do not trap exceptions.  They're exceptional; and you, as the implementer,
+have a much better idea of what to do with them.</p></div></div><div class="code"><div class="wrapper">          <span class="nx">workerFunc</span> <span class="nx">item</span><span class="p">,</span> <span class="nf">(error) -&gt;</span>
+            <span class="nx">numInFlight</span> <span class="o">-=</span> <span class="mi">1</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>Thus, if there is an error, we immediately bail.</p></div></div><div class="code"><div class="wrapper">            <span class="k">return</span> <span class="nx">respond</span><span class="p">(</span><span class="nx">error</span><span class="p">)</span> <span class="k">if</span> <span class="nx">error</span><span class="o">?</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>Otherwise, continue on.</p></div></div><div class="code"><div class="wrapper">            <span class="nx">processItem</span><span class="p">()</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>No item, and we're out of work?  Awesome, we're done!</p></div></div><div class="code"><div class="wrapper">        <span class="k">else</span> <span class="k">if</span> <span class="nx">numInFlight</span> <span class="o">==</span> <span class="mi">0</span>
+          <span class="nx">respond</span><span class="p">()</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>Part of the contract is that the callback passed to <code>exec</code> is only called once.</p></div></div><div class="code"><div class="wrapper">      <span class="nv">respond = </span><span class="nf">(error) -&gt;</span>
+        <span class="nx">unless</span> <span class="nx">hasResponded</span>
+          <span class="nv">hasResponded = </span><span class="kc">true</span>
+          <span class="nx">callback</span> <span class="nx">error</span></div></div></div><div class="segment"><div class="comments"><div class="wrapper"><p>Kick off enough workers to work through our items.</p></div></div><div class="code"><div class="wrapper">      <span class="k">while</span> <span class="o">!</span><span class="nx">hasResponded</span> <span class="o">and</span> <span class="nx">itemsLeft</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">and</span> <span class="nx">numInFlight</span> <span class="o">&lt;</span> <span class="nx">options</span><span class="p">.</span><span class="nx">maxConcurrency</span>
+        <span class="nx">processItem</span><span class="p">()</span>
+
+    <span class="nx">result</span>
+
+
+<span class="nv">module.exports = </span><span class="nx">spate</span></div></div></div></div></body></html>
