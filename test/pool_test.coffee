@@ -16,105 +16,115 @@ poolCommonSuccessVows =
     assert.deepEqual @workItems, [1,2,3,4,5]
 
 
-vows.describe('spate').addBatch
+vows.describe('spate.pool').addBatch
 
-  "spate.pool":
-
-    "should require maxConcurrency to be set": ->
-      assert.throws (-> spate.pool [1,2,3], {}, ->), TypeError
-      assert.throws (-> spate.pool [1,2,3], foo: 'bar', ->), TypeError
-      assert.throws (-> spate.pool [1,2,3], null, ->), TypeError
-      assert.throws (-> spate.pool [1,2,3], undefined, ->), TypeError
+  "should require maxConcurrency to be set": ->
+    assert.throws (-> spate.pool [1,2,3], {}, ->), TypeError
+    assert.throws (-> spate.pool [1,2,3], foo: 'bar', ->), TypeError
+    assert.throws (-> spate.pool [1,2,3], null, ->), TypeError
+    assert.throws (-> spate.pool [1,2,3], undefined, ->), TypeError
 
 
-    "with synchronous worker functions":
-      topic: ->
-        (result, options) ->
-          @result = []
-          @workItems = [1,2,3,4,5]
+  "with synchronous worker functions":
+    topic: ->
+      (result, options) ->
+        @result = []
+        @workItems = [1,2,3,4,5]
 
-          pool = spate.pool @workItems, options, (item, done) =>
+        pool = spate.pool @workItems, options, (item, done) =>
+          @result.push item + 10
+          done(result...)
+
+        pool.exec @callback
+        undefined
+
+    "and maxConcurrency is 1": _(_.clone(poolCommonSuccessVows)).extend
+      topic: (work) ->
+        work.apply @, [[], maxConcurrency: 1]
+
+    "and maxConcurrency is less than the number of work items": _(_.clone(poolCommonSuccessVows)).extend
+      topic: (work) ->
+        work.apply @, [[], maxConcurrency: 2]
+
+    "and maxConcurrency is equal to the number of work items": _(_.clone(poolCommonSuccessVows)).extend
+      topic: (work) ->
+        work.apply @, [[], maxConcurrency: 5]
+
+    "and maxConcurrency is greater than the number of work items": _(_.clone(poolCommonSuccessVows)).extend
+      topic: (work) ->
+        work.apply @, [[], maxConcurrency: 10]
+
+    "that finish in error":
+      topic: (work) ->
+        work.apply @, [['some error'], maxConcurrency: 10]
+
+      "should result in an error": (error, res) ->
+        assert.equal error, 'some error'
+
+      "should stop the pool from continuing": (error, res) ->
+        assert.equal @result.length, 1
+
+
+  "with asynchronous worker functions":
+    topic: ->
+      (result, options) ->
+        @result = []
+        @workItems = [1,2,3,4,5]
+        @inProgress = 0
+        @maxInProgress = 0
+
+        pool = spate.pool @workItems, options, (item, done) =>
+          @inProgress += 1; @maxInProgress = Math.max(@inProgress, @maxInProgress)
+          worker = =>
             @result.push item + 10
+            @inProgress -= 1
             done(result...)
 
-          pool.exec @callback
-          undefined
+          setTimeout worker, Math.ceil(Math.random() * 5)
 
-      "and maxConcurrency is less than the number of work items": _(_.clone(poolCommonSuccessVows)).extend
-        topic: (work) ->
-          work.apply @, [[], maxConcurrency: 2]
+        pool.exec @callback
+        undefined
 
-      "and maxConcurrency is equal to the number of work items": _(_.clone(poolCommonSuccessVows)).extend
-        topic: (work) ->
-          work.apply @, [[], maxConcurrency: 5]
+    "and maxConcurrency is 1": _(_.clone(poolCommonSuccessVows)).extend
+      topic: (work) ->
+        work.apply @, [[], maxConcurrency: 1]
 
-      "and maxConcurrency is greater than the number of work items": _(_.clone(poolCommonSuccessVows)).extend
-        topic: (work) ->
-          work.apply @, [[], maxConcurrency: 10]
-
-      "that finish in error":
-        topic: (work) ->
-          work.apply @, [['some error'], maxConcurrency: 10]
-
-        "should result in an error": (error, res) ->
-          assert.equal error, 'some error'
-
-        "should stop the pool from continuing": (error, res) ->
-          assert.equal @result.length, 1
+      "should cap at 1 concurrent worker function": (error) ->
+        assert.equal @maxInProgress, 1
 
 
-    "with asynchronous worker functions":
-      topic: ->
-        (result, options) ->
-          @result = []
-          @workItems = [1,2,3,4,5]
-          @inProgress = 0
-          @maxInProgress = 0
+    "and maxConcurrency is less than the number of work items": _(_.clone(poolCommonSuccessVows)).extend
+      topic: (work) ->
+        work.apply @, [[], maxConcurrency: 2]
 
-          pool = spate.pool @workItems, options, (item, done) =>
-            @inProgress += 1; @maxInProgress = Math.max(@inProgress, @maxInProgress)
-            worker = =>
-              @result.push item + 10
-              @inProgress -= 1
-              done(result...)
-
-            setTimeout worker, Math.ceil(Math.random() * 5)
-
-          pool.exec @callback
-          undefined
-
-      "and maxConcurrency is less than the number of work items": _(_.clone(poolCommonSuccessVows)).extend
-        topic: (work) ->
-          work.apply @, [[], maxConcurrency: 2]
-
-        "should cap at maxConcurrency concurrent worker functions": (error) ->
-          assert.equal @maxInProgress, 2
+      "should cap at maxConcurrency concurrent worker functions": (error) ->
+        assert.equal @maxInProgress, 2
 
 
-      "and maxConcurrency is equal to the number of work items": _(_.clone(poolCommonSuccessVows)).extend
-        topic: (work) ->
-          work.apply @, [[], maxConcurrency: 5]
+    "and maxConcurrency is equal to the number of work items": _(_.clone(poolCommonSuccessVows)).extend
+      topic: (work) ->
+        work.apply @, [[], maxConcurrency: 5]
 
-        "should cap at maxConcurrency concurrent worker functions": (error) ->
-          assert.equal @maxInProgress, 5
-
-
-      "and maxConcurrency is greater than the number of work items": _(_.clone(poolCommonSuccessVows)).extend
-        topic: (work) ->
-          work.apply @, [[], maxConcurrency: 10]
-
-        "should spawn as many worker functions as work items": (error) ->
-          assert.equal @maxInProgress, 5
+      "should cap at maxConcurrency concurrent worker functions": (error) ->
+        assert.equal @maxInProgress, 5
 
 
-      "that finish in error":
-        topic: (work) ->
-          work.apply @, [['some error'], maxConcurrency: 10]
+    "and maxConcurrency is greater than the number of work items": _(_.clone(poolCommonSuccessVows)).extend
+      topic: (work) ->
+        work.apply @, [[], maxConcurrency: 10]
 
-        "should result in an error": (error, res) ->
-          assert.equal error, 'some error'
+      "should spawn as many worker functions as work items": (error) ->
+        assert.equal @maxInProgress, 5
 
-        "should stop the pool from continuing": (error, res) ->
-          assert.equal @result.length, 1
+
+    "that finish in error":
+      topic: (work) ->
+        work.apply @, [['some error'], maxConcurrency: 10]
+
+      "should result in an error": (error, res) ->
+        assert.equal error, 'some error'
+
+      "should stop the pool from continuing": (error, res) ->
+        assert.equal @result.length, 1
 
 .export(module)
